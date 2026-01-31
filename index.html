@@ -3,8 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
     <meta name="robots" content="noindex, nofollow">
-    <title>Full Power Focus Timer</title>
+
+    <meta property="og:title" content="集中＆休憩タイマー">
+    <meta property="og:description" content="作業時間と休憩時間を自由に設定できる、視覚的にわかりやすい円グラフタイマーです。">
+    <meta property="og:type" content="website">
+
+    <title>集中＆休憩タイマー</title>
     <style>
         :root {
             --work-color: #4A90E2; /* 作業：青 */
@@ -80,28 +86,18 @@
             transition: stroke-dasharray 0.5s;
         }
 
-        /* 背景用（薄いグレー） */
-        .base-circle {
-            stroke: #e6e6e6;
-        }
-
+        /* 背景用 */
+        .base-circle { stroke: #e6e6e6; }
         /* 作業時間のアーク */
-        .work-arc {
-            stroke: var(--work-color);
-        }
-
+        .work-arc { stroke: var(--work-color); }
         /* 休憩時間のアーク */
-        .break-arc {
-            stroke: var(--break-color);
-        }
+        .break-arc { stroke: var(--break-color); }
 
-        /* 現在位置を示すポインター（白い丸） */
+        /* 現在位置を示すポインター */
         .cursor-point {
             position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
             pointer-events: none;
             transition: transform 1s linear;
         }
@@ -111,8 +107,7 @@
             position: absolute;
             top: 10px; /* 半径に合わせて調整 */
             left: 50%;
-            width: 16px;
-            height: 16px;
+            width: 16px; height: 16px;
             background-color: #fff;
             border: 4px solid var(--cursor-color);
             border-radius: 50%;
@@ -123,8 +118,7 @@
         /* 中央のテキスト情報 */
         .info-display {
             position: absolute;
-            top: 50%;
-            left: 50%;
+            top: 50%; left: 50%;
             transform: translate(-50%, -50%);
             text-align: center;
             width: 80%;
@@ -147,7 +141,7 @@
         }
 
         .praise-message {
-            color: #E91E63; /* 褒める時はピンク系 */
+            color: #E91E63;
             font-weight: bold;
             font-size: 1.1rem;
             animation: popIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -175,25 +169,10 @@
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
         }
 
-        #startBtn {
-            background-color: var(--work-color);
-            color: white;
-        }
-        
-        #startBtn:hover {
-            background-color: #357ABD;
-            transform: translateY(-2px);
-        }
-
-        #resetBtn {
-            background-color: #fff;
-            color: #666;
-            border: 1px solid #ddd;
-        }
-
-        #resetBtn:hover {
-            background-color: #f8f8f8;
-        }
+        #startBtn { background-color: var(--work-color); color: white; }
+        #startBtn:hover { background-color: #357ABD; transform: translateY(-2px); }
+        #resetBtn { background-color: #fff; color: #666; border: 1px solid #ddd; }
+        #resetBtn:hover { background-color: #f8f8f8; }
 
     </style>
 </head>
@@ -221,7 +200,7 @@
 
         <div class="info-display">
             <span class="sub-message" id="topMsg">準備完了</span>
-            <span class="main-time" id="timeDisplay">25:00</span>
+            <span class="main-time" id="timeDisplay">--:--</span>
             <span class="sub-message" id="btmMsg">スタートボタンを押してね</span>
         </div>
     </div>
@@ -252,231 +231,4 @@
         let totalCycleSeconds = 0;
         let workSeconds = 0;
         let breakSeconds = 0;
-        let currentSeconds = 0; // 経過時間
-        let timerInterval = null;
-        let isRunning = false;
-        
-        // 音声コンテキスト（クリック後に初期化）
-        let audioCtx = null;
-
-        // --- 労いメッセージ集 ---
-        const praiseMessages = [
-            "天才的な集中力でした！",
-            "素晴らしい！ゆっくり休んで！",
-            "その調子！あなたは最高です！",
-            "完璧な仕事ぶりです！",
-            "すごい！目標達成おめでとう！",
-            "神がかった集中力！"
-        ];
-
-        // --- 初期化 ---
-        function initTimer() {
-            // 初期値をセット
-            const wMin = parseInt(workInput.value);
-            const bMin = parseInt(breakInput.value);
-            workSeconds = wMin * 60;
-            breakSeconds = bMin * 60;
-            totalCycleSeconds = workSeconds + breakSeconds;
-            
-            // 円グラフの描画計算
-            // 作業部分の長さ
-            const workRatio = workSeconds / totalCycleSeconds;
-            const workDash = workRatio * CIRCUMFERENCE;
-            workArc.style.strokeDasharray = `${workDash} ${CIRCUMFERENCE}`;
-            workArc.style.strokeDashoffset = 0;
-
-            // 休憩部分の長さ
-            const breakRatio = breakSeconds / totalCycleSeconds;
-            const breakDash = breakRatio * CIRCUMFERENCE;
-            breakArc.style.strokeDasharray = `${breakDash} ${CIRCUMFERENCE}`;
-            // 休憩の開始位置は作業の終わりから（マイナス方向へオフセット）
-            breakArc.style.strokeDashoffset = -workDash;
-
-            updateVisuals();
-        }
-
-        // --- 表示更新 ---
-        function updateVisuals() {
-            // 1. 現在のモード判定
-            let isWorkPhase = currentSeconds < workSeconds;
-            let displayTimeSeconds = 0;
-
-            if (isWorkPhase) {
-                // 作業中：残り作業時間を表示
-                displayTimeSeconds = workSeconds - currentSeconds;
-                timeDisplay.style.color = "#333";
-                
-                // 応援メッセージ
-                if(isRunning) {
-                    topMsg.textContent = "作業中";
-                    btmMsg.textContent = `あと${Math.ceil(displayTimeSeconds/60)}分！頑張ろう！`;
-                    btmMsg.className = "sub-message";
-                }
-            } else {
-                // 休憩中：残り休憩時間を表示
-                displayTimeSeconds = totalCycleSeconds - currentSeconds;
-                timeDisplay.style.color = "var(--break-color)";
-                
-                if(isRunning) {
-                    topMsg.textContent = "休憩中";
-                    // 休憩に入った瞬間のメッセージは別途制御するが、基本表示はこれ
-                    if (!btmMsg.classList.contains('praise-message')) {
-                         btmMsg.textContent = "リラックスしてね";
-                    }
-                }
-            }
-
-            // 時間表示形式 MM:SS
-            const m = Math.floor(displayTimeSeconds / 60).toString().padStart(2, '0');
-            const s = (displayTimeSeconds % 60).toString().padStart(2, '0');
-            timeDisplay.textContent = `${m}:${s}`;
-
-            // 2. カーソル位置の更新
-            // 角度計算 (0〜360度)
-            const progressRatio = currentSeconds / totalCycleSeconds;
-            const degrees = progressRatio * 360;
-            cursorPoint.style.transform = `rotate(${degrees}deg)`;
-        }
-
-        // --- 音声再生機能 (Beep) ---
-        function initAudio() {
-            if (!audioCtx) {
-                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-            }
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
-            }
-        }
-
-        function playBeep(type) {
-            if (!audioCtx) return;
-
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
-
-            if (type === 'short') {
-                // 20%ごとの軽い音
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime); // ラの音
-                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                oscillator.start();
-                oscillator.stop(audioCtx.currentTime + 0.1);
-            } else if (type === 'long') {
-                // 完了時のピピピ音
-                oscillator.type = 'triangle';
-                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
-                oscillator.frequency.setValueAtTime(1760, audioCtx.currentTime + 0.1); // オクターブ上
-                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime + 0.2);
-                oscillator.frequency.setValueAtTime(1760, audioCtx.currentTime + 0.3);
-                
-                gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
-                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
-                
-                oscillator.start();
-                oscillator.stop(audioCtx.currentTime + 0.5);
-            }
-        }
-
-        // --- タイマー進行ロジック ---
-        function tick() {
-            currentSeconds++;
-
-            // 終了判定
-            if (currentSeconds > totalCycleSeconds) {
-                finishCycle();
-                return;
-            }
-
-            // 作業完了（休憩入り）判定
-            if (currentSeconds === workSeconds) {
-                playBeep('long');
-                showPraise();
-            }
-            // 休憩終了判定
-            else if (currentSeconds === totalCycleSeconds) {
-                // 次のtickでfinishCycleが呼ばれるが、ここで音だけ鳴らす
-                 playBeep('long');
-            }
-            // 20%ごとの進捗通知（作業時間中のみ）
-            else if (currentSeconds < workSeconds) {
-                // 作業時間の20%ごとの秒数を計算
-                const step = Math.floor(workSeconds * 0.2);
-                if (currentSeconds % step === 0 && currentSeconds > 0) {
-                    playBeep('short');
-                }
-            }
-
-            updateVisuals();
-        }
-
-        // 200%の労い表示
-        function showPraise() {
-            const randomMsg = praiseMessages[Math.floor(Math.random() * praiseMessages.length)];
-            btmMsg.textContent = randomMsg;
-            btmMsg.className = "sub-message praise-message";
-        }
-
-        function finishCycle() {
-            clearInterval(timerInterval);
-            isRunning = false;
-            startBtn.textContent = "スタート";
-            alert("1サイクル終了です！お疲れ様でした。");
-            currentSeconds = 0;
-            btmMsg.className = "sub-message"; // クラスを戻す
-            btmMsg.textContent = "もう一度頑張る？";
-            updateVisuals();
-        }
-
-        // --- ボタン操作 ---
-        startBtn.addEventListener('click', () => {
-            initAudio(); // 音声機能の有効化
-
-            if (isRunning) {
-                // 一時停止
-                clearInterval(timerInterval);
-                isRunning = false;
-                startBtn.textContent = "再開";
-            } else {
-                // スタート（初回または再開）
-                // 設定値が変わっているかもしれないので、0秒のときだけ再計算
-                if (currentSeconds === 0) initTimer();
-                
-                isRunning = true;
-                startBtn.textContent = "一時停止";
-                topMsg.textContent = currentSeconds < workSeconds ? "作業中" : "休憩中";
-
-                timerInterval = setInterval(tick, 1000);
-            }
-        });
-
-        resetBtn.addEventListener('click', () => {
-            clearInterval(timerInterval);
-            isRunning = false;
-            currentSeconds = 0;
-            startBtn.textContent = "スタート";
-            topMsg.textContent = "準備完了";
-            btmMsg.textContent = "スタートボタンを押してね";
-            btmMsg.className = "sub-message";
-            initTimer(); // 画面リセット
-        });
-
-        // 入力値変更時
-        [workInput, breakInput].forEach(input => {
-            input.addEventListener('change', () => {
-                if (!isRunning) {
-                    currentSeconds = 0;
-                    initTimer();
-                }
-            });
-        });
-
-        // 初回実行
-        initTimer();
-
-    </script>
-</body>
-
-</html>
+        let currentSeconds = 0
