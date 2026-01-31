@@ -231,4 +231,179 @@
         let totalCycleSeconds = 0;
         let workSeconds = 0;
         let breakSeconds = 0;
-        let currentSeconds = 0
+        let currentSeconds = 0;
+        let timerInterval = null;
+        let isRunning = false;
+        let audioCtx = null;
+
+        const praiseMessages = [
+            "天才的な集中力でした！", "素晴らしい！ゆっくり休んで！",
+            "その調子！あなたは最高です！", "完璧な仕事ぶりです！",
+            "すごい！目標達成おめでとう！", "神がかった集中力！"
+        ];
+
+        // --- 初期化 ---
+        function initTimer() {
+            const wMin = parseInt(workInput.value);
+            const bMin = parseInt(breakInput.value);
+            workSeconds = wMin * 60;
+            breakSeconds = bMin * 60;
+            totalCycleSeconds = workSeconds + breakSeconds;
+            
+            // 円グラフ描画
+            const workRatio = workSeconds / totalCycleSeconds;
+            const workDash = workRatio * CIRCUMFERENCE;
+            workArc.style.strokeDasharray = `${workDash} ${CIRCUMFERENCE}`;
+            workArc.style.strokeDashoffset = 0;
+
+            const breakRatio = breakSeconds / totalCycleSeconds;
+            const breakDash = breakRatio * CIRCUMFERENCE;
+            breakArc.style.strokeDasharray = `${breakDash} ${CIRCUMFERENCE}`;
+            breakArc.style.strokeDashoffset = -workDash;
+
+            updateVisuals();
+        }
+
+        // --- 表示更新 ---
+        function updateVisuals() {
+            let isWorkPhase = currentSeconds < workSeconds;
+            let displayTimeSeconds = 0;
+
+            if (isWorkPhase) {
+                displayTimeSeconds = workSeconds - currentSeconds;
+                timeDisplay.style.color = "#333";
+                if(isRunning) {
+                    topMsg.textContent = "作業中";
+                    btmMsg.textContent = `あと${Math.ceil(displayTimeSeconds/60)}分！頑張ろう！`;
+                    btmMsg.className = "sub-message";
+                }
+            } else {
+                displayTimeSeconds = totalCycleSeconds - currentSeconds;
+                timeDisplay.style.color = "var(--break-color)";
+                if(isRunning) {
+                    topMsg.textContent = "休憩中";
+                    if (!btmMsg.classList.contains('praise-message')) {
+                         btmMsg.textContent = "リラックスしてね";
+                    }
+                }
+            }
+
+            const m = Math.floor(displayTimeSeconds / 60).toString().padStart(2, '0');
+            const s = (displayTimeSeconds % 60).toString().padStart(2, '0');
+            timeDisplay.textContent = `${m}:${s}`;
+
+            const progressRatio = currentSeconds / totalCycleSeconds;
+            const degrees = progressRatio * 360;
+            cursorPoint.style.transform = `rotate(${degrees}deg)`;
+        }
+
+        // --- 音声 (Beep) ---
+        function initAudio() {
+            if (!audioCtx) {
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function playBeep(type) {
+            if (!audioCtx) return;
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+
+            if (type === 'short') {
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.1);
+            } else if (type === 'long') {
+                oscillator.type = 'triangle';
+                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+                oscillator.frequency.setValueAtTime(1760, audioCtx.currentTime + 0.1);
+                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime + 0.2);
+                oscillator.frequency.setValueAtTime(1760, audioCtx.currentTime + 0.3);
+                gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.5);
+            }
+        }
+
+        // --- 進行ロジック ---
+        function tick() {
+            currentSeconds++;
+            if (currentSeconds > totalCycleSeconds) {
+                finishCycle();
+                return;
+            }
+            if (currentSeconds === workSeconds) {
+                playBeep('long');
+                showPraise();
+            } else if (currentSeconds === totalCycleSeconds) {
+                 playBeep('long');
+            } else if (currentSeconds < workSeconds) {
+                const step = Math.floor(workSeconds * 0.2);
+                if (currentSeconds % step === 0 && currentSeconds > 0) playBeep('short');
+            }
+            updateVisuals();
+        }
+
+        function showPraise() {
+            const randomMsg = praiseMessages[Math.floor(Math.random() * praiseMessages.length)];
+            btmMsg.textContent = randomMsg;
+            btmMsg.className = "sub-message praise-message";
+        }
+
+        function finishCycle() {
+            clearInterval(timerInterval);
+            isRunning = false;
+            startBtn.textContent = "スタート";
+            alert("1サイクル終了です！お疲れ様でした。");
+            currentSeconds = 0;
+            btmMsg.className = "sub-message";
+            btmMsg.textContent = "もう一度頑張る？";
+            updateVisuals();
+        }
+
+        // --- イベント ---
+        startBtn.addEventListener('click', () => {
+            initAudio();
+            if (isRunning) {
+                clearInterval(timerInterval);
+                isRunning = false;
+                startBtn.textContent = "再開";
+            } else {
+                if (currentSeconds === 0) initTimer();
+                isRunning = true;
+                startBtn.textContent = "一時停止";
+                topMsg.textContent = currentSeconds < workSeconds ? "作業中" : "休憩中";
+                timerInterval = setInterval(tick, 1000);
+            }
+        });
+
+        resetBtn.addEventListener('click', () => {
+            clearInterval(timerInterval);
+            isRunning = false;
+            currentSeconds = 0;
+            startBtn.textContent = "スタート";
+            topMsg.textContent = "準備完了";
+            btmMsg.textContent = "スタートボタンを押してね";
+            btmMsg.className = "sub-message";
+            initTimer();
+        });
+
+        [workInput, breakInput].forEach(input => {
+            input.addEventListener('change', () => {
+                if (!isRunning) {
+                    currentSeconds = 0;
+                    initTimer();
+                }
+            });
+        });
+
+        initTimer();
+    </script>
+</body>
+</html>
