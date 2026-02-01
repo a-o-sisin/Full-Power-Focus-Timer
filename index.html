@@ -3,13 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    
     <meta name="robots" content="noindex, nofollow">
-
     <meta property="og:title" content="集中＆休憩タイマー">
-    <meta property="og:description" content="作業時間と休憩時間を自由に設定できる、視覚的にわかりやすい円グラフタイマーです。">
-    <meta property="og:type" content="website">
-
     <title>集中＆休憩タイマー</title>
     <style>
         :root {
@@ -26,7 +21,7 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            min-height: 100vh; /* heightから変更してスマホでの表示崩れ防止 */
             margin: 0;
             background-color: var(--bg-color);
             color: var(--text-color);
@@ -37,7 +32,7 @@
         .settings {
             display: flex;
             gap: 20px;
-            margin-bottom: 20px;
+            margin-bottom: 10px;
             background: white;
             padding: 15px 25px;
             border-radius: 15px;
@@ -69,8 +64,8 @@
         /* メインタイマー表示部 */
         .timer-wrapper {
             position: relative;
-            width: 320px;
-            height: 320px;
+            width: 300px; /* 少し縮小してスマホに最適化 */
+            height: 300px;
             margin: 20px 0;
         }
 
@@ -99,13 +94,13 @@
             top: 0; left: 0;
             width: 100%; height: 100%;
             pointer-events: none;
-            transition: transform 0.1s linear; /* 動きをスムーズに */
+            transition: transform 0.1s linear;
         }
         
         .cursor-point::after {
             content: '';
             position: absolute;
-            top: 10px; /* 半径に合わせて調整 */
+            top: 10px; 
             left: 50%;
             width: 16px; height: 16px;
             background-color: #fff;
@@ -135,7 +130,7 @@
         .sub-message {
             display: block;
             margin-top: 10px;
-            font-size: 1rem;
+            font-size: 0.9rem;
             color: #666;
             min-height: 1.5em;
         }
@@ -156,6 +151,7 @@
         .controls {
             display: flex;
             gap: 15px;
+            margin-bottom: 25px;
         }
 
         button {
@@ -173,6 +169,52 @@
         #startBtn:hover { background-color: #357ABD; transform: translateY(-2px); }
         #resetBtn { background-color: #fff; color: #666; border: 1px solid #ddd; }
         #resetBtn:hover { background-color: #f8f8f8; }
+
+        /* 今日の実績エリア */
+        .daily-stats {
+            background: #fff;
+            padding: 15px 20px;
+            border-radius: 12px;
+            width: 85%;
+            max-width: 320px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+            text-align: center;
+        }
+
+        .stats-title {
+            font-size: 0.85rem;
+            color: #888;
+            margin-bottom: 8px;
+            display: block;
+            font-weight: bold;
+        }
+
+        .stats-content {
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            font-size: 1rem;
+        }
+
+        .stat-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: #aaa;
+        }
+
+        .stat-value {
+            font-weight: bold;
+            font-size: 1.2rem;
+            margin-top: 2px;
+        }
+        
+        .work-stat { color: var(--work-color); }
+        .break-stat { color: var(--break-color); }
 
     </style>
 </head>
@@ -210,6 +252,20 @@
         <button id="resetBtn">リセット</button>
     </div>
 
+    <div class="daily-stats">
+        <span class="stats-title" id="statsDate">--月--日の実績</span>
+        <div class="stats-content">
+            <div class="stat-item">
+                <span class="stat-label">作業</span>
+                <span class="stat-value work-stat" id="totalWorkTime">0分</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">休憩</span>
+                <span class="stat-value break-stat" id="totalBreakTime">0分</span>
+            </div>
+        </div>
+    </div>
+
     <script>
         // --- 設定と定数 ---
         const RADIUS = 140;
@@ -226,20 +282,31 @@
         const btmMsg = document.getElementById('btmMsg');
         const startBtn = document.getElementById('startBtn');
         const resetBtn = document.getElementById('resetBtn');
+        
+        // 実績表示用要素
+        const statsDate = document.getElementById('statsDate');
+        const totalWorkElem = document.getElementById('totalWorkTime');
+        const totalBreakElem = document.getElementById('totalBreakTime');
 
         // --- 状態管理 ---
         let totalCycleSeconds = 0;
         let workSeconds = 0;
         let breakSeconds = 0;
         
-        // 【修正点1】経過時間を管理するための変数を変更
-        let startTime = 0;    // タイマー開始時のタイムスタンプ
-        let pausedTime = 0;   // 一時停止した時点での経過時間
+        let startTime = 0;    
+        let pausedTime = 0;   
         let timerInterval = null;
         let isRunning = false;
         
+        let lastTickSec = 0;
+        
+        // 今日の実績用変数
+        let dailyWorkSec = 0;
+        let dailyBreakSec = 0;
+        let todayStr = ""; // YYYY-MM-DD形式
+
         let audioCtx = null;
-        let wakeLock = null; // 【修正点2】Wake Lock用変数
+        let wakeLock = null;
 
         const praiseMessages = [
             "天才的な集中力でした！", "素晴らしい！ゆっくり休んで！",
@@ -266,12 +333,76 @@
             breakArc.style.strokeDasharray = `${breakDash} ${CIRCUMFERENCE}`;
             breakArc.style.strokeDashoffset = -workDash;
 
-            updateVisuals(0); // 0秒地点で描画
+            updateVisuals(0);
+        }
+
+        // --- 実績管理ロジック ---
+        function loadDailyStats() {
+            const now = new Date();
+            const year = now.getFullYear();
+            const month = now.getMonth() + 1;
+            const day = now.getDate();
+            todayStr = `${year}-${month}-${day}`; // キー作成
+
+            // 表示用日付更新
+            statsDate.textContent = `📅 ${month}月${day}日の実績`;
+
+            // ローカルストレージから読み込み
+            const savedData = localStorage.getItem(`timer_stats_${todayStr}`);
+            if (savedData) {
+                const parsed = JSON.parse(savedData);
+                dailyWorkSec = parsed.work || 0;
+                dailyBreakSec = parsed.break || 0;
+            } else {
+                dailyWorkSec = 0;
+                dailyBreakSec = 0;
+            }
+            updateStatsDisplay();
+        }
+
+        function saveDailyStats() {
+            const data = {
+                work: dailyWorkSec,
+                break: dailyBreakSec
+            };
+            localStorage.setItem(`timer_stats_${todayStr}`, JSON.stringify(data));
+        }
+
+        function updateStatsDisplay() {
+            totalWorkElem.textContent = `${Math.floor(dailyWorkSec / 60)}分`;
+            totalBreakElem.textContent = `${Math.floor(dailyBreakSec / 60)}分`;
+        }
+
+        // --- 累積加算ロジック (重要) ---
+        function accumulateTime(prevSec, currSec) {
+            // 時間が戻っている、もしくは変化がない場合は無視
+            if (currSec <= prevSec) return;
+
+            // 今回経過した区間: [start, end]
+            const start = prevSec;
+            const end = currSec;
+
+            // 1. 作業時間への加算 (0 ～ workSeconds の範囲と重なる部分)
+            // 重なり = Math.min(end, workSeconds) - Math.max(start, 0)
+            const workOverlapStart = Math.max(start, 0);
+            const workOverlapEnd = Math.min(end, workSeconds);
+            if (workOverlapEnd > workOverlapStart) {
+                dailyWorkSec += (workOverlapEnd - workOverlapStart);
+            }
+
+            // 2. 休憩時間への加算 (workSeconds ～ totalCycleSeconds の範囲と重なる部分)
+            const breakOverlapStart = Math.max(start, workSeconds);
+            const breakOverlapEnd = Math.min(end, totalCycleSeconds);
+            if (breakOverlapEnd > breakOverlapStart) {
+                dailyBreakSec += (breakOverlapEnd - breakOverlapStart);
+            }
+            
+            saveDailyStats();
+            updateStatsDisplay();
         }
 
         // --- 表示更新 ---
         function updateVisuals(currentSec) {
-            // 安全策：時間を超過しないように丸める
             if (currentSec > totalCycleSeconds) currentSec = totalCycleSeconds;
 
             let isWorkPhase = currentSec < workSeconds;
@@ -339,12 +470,11 @@
             }
         }
 
-        // --- 【修正点3】Screen Wake Lock (画面常時オン) ---
+        // --- Screen Wake Lock ---
         async function requestWakeLock() {
             try {
                 if ('wakeLock' in navigator) {
                     wakeLock = await navigator.wakeLock.request('screen');
-                    console.log('Wake Lock is active');
                 }
             } catch (err) {
                 console.error(`${err.name}, ${err.message}`);
@@ -356,74 +486,50 @@
                 wakeLock.release()
                     .then(() => {
                         wakeLock = null;
-                        console.log('Wake Lock released');
                     });
             }
         }
 
         // --- 進行ロジック ---
         function tick() {
-            // 現在時刻と開始時刻の差分から正確な経過時間を算出
             const elapsed = Math.floor((Date.now() - startTime) / 1000);
-            
-            // 実際に表示すべき秒数 (一時停止していた分があれば足す... 今回はリセット型なのでシンプルに)
-            // ここでは pause機能を「一時停止」として実装する場合のロジックを入れています
             let currentSec = elapsed; 
 
             if (currentSec > totalCycleSeconds) {
+                // 終了直前の差分も加算してから終了
+                accumulateTime(lastTickSec, totalCycleSeconds);
                 finishCycle();
                 return;
             }
 
-            // 音のタイミング制御（厳密な一致が難しいため、変化した瞬間を検知するロジックに変更）
-            // ※簡易的に、前回の秒数と比較する方法もありますが、
-            // 今回は「特定の秒数を通過したか」を判定するのは複雑になるため、
-            // 表示更新に合わせて特定のタイミングで鳴らす簡易実装のままにします。
-            // ただし、厳密なタイミングで鳴らしたい場合は、次の秒数に切り替わった瞬間を検知する必要があります。
-            
-            // 簡易実装: 秒が変わったタイミングで判定 (Date.nowベースだと毎フレーム呼ぶわけではないので、
-            // setIntervalの精度依存にはなりますが、時間はズレません)
-            
-            // 作業終了（休憩開始）の判定
-            if (currentSec === workSeconds && workSeconds > 0) {
-                 // 連続再生を防ぐフラグ管理が必要ですが、簡易的に音を鳴らします
-                 // 厳密には「直前のtickでworkSeconds未満だった」判定が必要ですが、
-                 // 1秒ごとの更新ならほぼ大丈夫です。
-                 // 念のため、音が鳴りまくらないようにするのはUI側で制御
-            }
+            // 前回tickからの経過時間を実績に加算
+            // 画面オフで時間が飛んでも、ここで「飛んだ分」を計算して加算します
+            accumulateTime(lastTickSec, currentSec);
 
-            // ここではシンプルに描画更新に専念させ、
-            // 特定時刻のイベント（音）は「前回の秒数」を覚えておいて「またいだら鳴らす」がベストですが
-            // 既存ロジックを極力活かして実装します。
-            
-            // 既存ロジックの「特定秒数での音」を再現するための工夫
-            // currentSecが変化したタイミングでのみ処理を行う
-            if (this.lastSec !== currentSec) {
-                if (currentSec === workSeconds) {
-                    playBeep('long');
-                    showPraise();
-                } else if (currentSec === totalCycleSeconds) {
-                     playBeep('long');
-                } else if (currentSec < workSeconds) {
-                    const step = Math.floor(workSeconds * 0.2);
-                    if (currentSec % step === 0 && currentSec > 0) playBeep('short');
+            // 音判定ロジック
+            if (lastTickSec < workSeconds && currentSec >= workSeconds) {
+                playBeep('long');
+                showPraise();
+            }
+            else if (currentSec < workSeconds) {
+                const step = Math.floor(workSeconds * 0.2);
+                const prevStepCount = Math.floor(lastTickSec / step);
+                const currStepCount = Math.floor(currentSec / step);
+                
+                if (currStepCount > prevStepCount && lastTickSec > 0) {
+                     playBeep('short');
                 }
-                this.lastSec = currentSec;
             }
 
+            lastTickSec = currentSec;
             updateVisuals(currentSec);
         }
 
-        function showPraise() {
-            const randomMsg = praiseMessages[Math.floor(Math.random() * praiseMessages.length)];
-            btmMsg.textContent = randomMsg;
-            btmMsg.className = "sub-message praise-message";
-        }
-
         function finishCycle() {
+            playBeep('long');
             clearInterval(timerInterval);
             isRunning = false;
-            releaseWakeLock(); // 終了時に画面ロック解除
+            releaseWakeLock(); 
             startBtn.textContent = "スタート";
             alert("1サイクル終了です！お疲れ様でした。");
             pausedTime = 0;
@@ -437,44 +543,43 @@
             initAudio();
             
             if (isRunning) {
-                // 一時停止処理
+                // 一時停止
                 clearInterval(timerInterval);
                 isRunning = false;
-                releaseWakeLock(); // 一時停止時は画面オフ許可
-                
-                // 停止した時点での経過時間を保存
+                releaseWakeLock(); 
                 pausedTime = Math.floor((Date.now() - startTime) / 1000);
                 startBtn.textContent = "再開";
-                
             } else {
-                // 開始処理
-                requestWakeLock(); // 画面常時オン要求
-                
+                // 開始
+                requestWakeLock(); 
+                loadDailyStats(); // 日付変更対応のため開始時にもロード確認
+
                 if (pausedTime === 0) {
-                    initTimer(); // 最初から
+                    initTimer(); 
                     startTime = Date.now();
+                    lastTickSec = 0; 
                 } else {
-                    // 再開時：現在時刻から「すでに経過した時間」を引いた時間を開始時間とみなす
+                    // 再開
                     startTime = Date.now() - (pausedTime * 1000);
+                    lastTickSec = pausedTime; 
                 }
                 
                 isRunning = true;
                 startBtn.textContent = "一時停止";
                 
-                // 初回描画
                 const currentSec = pausedTime;
                 topMsg.textContent = currentSec < workSeconds ? "作業中" : "休憩中";
 
-                // インターバル開始
-                timerInterval = setInterval(tick, 200); // 描画をスムーズにするため更新頻度アップ
+                timerInterval = setInterval(tick, 200); 
             }
         });
 
         resetBtn.addEventListener('click', () => {
             clearInterval(timerInterval);
             isRunning = false;
-            releaseWakeLock(); // リセット時も画面オフ許可
+            releaseWakeLock(); 
             pausedTime = 0;
+            lastTickSec = 0;
             startBtn.textContent = "スタート";
             topMsg.textContent = "準備完了";
             btmMsg.textContent = "スタートボタンを押してね";
@@ -491,9 +596,10 @@
             });
         });
 
+        // 起動時処理
         initTimer();
+        loadDailyStats(); // 実績読み込み
         
-        // ページを離れたり戻ったりした時のWake Lock再取得
         document.addEventListener('visibilitychange', async () => {
             if (wakeLock !== null && document.visibilityState === 'visible') {
                 await requestWakeLock();
