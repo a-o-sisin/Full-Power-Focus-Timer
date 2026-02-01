@@ -99,7 +99,7 @@
             top: 0; left: 0;
             width: 100%; height: 100%;
             pointer-events: none;
-            transition: transform 1s linear;
+            transition: transform 0.1s linear; /* 動きをスムーズに */
         }
         
         .cursor-point::after {
@@ -231,10 +231,15 @@
         let totalCycleSeconds = 0;
         let workSeconds = 0;
         let breakSeconds = 0;
-        let currentSeconds = 0;
+        
+        // 【修正点1】経過時間を管理するための変数を変更
+        let startTime = 0;    // タイマー開始時のタイムスタンプ
+        let pausedTime = 0;   // 一時停止した時点での経過時間
         let timerInterval = null;
         let isRunning = false;
+        
         let audioCtx = null;
+        let wakeLock = null; // 【修正点2】Wake Lock用変数
 
         const praiseMessages = [
             "天才的な集中力でした！", "素晴らしい！ゆっくり休んで！",
@@ -249,7 +254,7 @@
             workSeconds = wMin * 60;
             breakSeconds = bMin * 60;
             totalCycleSeconds = workSeconds + breakSeconds;
-            
+
             // 円グラフ描画
             const workRatio = workSeconds / totalCycleSeconds;
             const workDash = workRatio * CIRCUMFERENCE;
@@ -261,16 +266,19 @@
             breakArc.style.strokeDasharray = `${breakDash} ${CIRCUMFERENCE}`;
             breakArc.style.strokeDashoffset = -workDash;
 
-            updateVisuals();
+            updateVisuals(0); // 0秒地点で描画
         }
 
         // --- 表示更新 ---
-        function updateVisuals() {
-            let isWorkPhase = currentSeconds < workSeconds;
+        function updateVisuals(currentSec) {
+            // 安全策：時間を超過しないように丸める
+            if (currentSec > totalCycleSeconds) currentSec = totalCycleSeconds;
+
+            let isWorkPhase = currentSec < workSeconds;
             let displayTimeSeconds = 0;
 
             if (isWorkPhase) {
-                displayTimeSeconds = workSeconds - currentSeconds;
+                displayTimeSeconds = workSeconds - currentSec;
                 timeDisplay.style.color = "#333";
                 if(isRunning) {
                     topMsg.textContent = "作業中";
@@ -278,7 +286,7 @@
                     btmMsg.className = "sub-message";
                 }
             } else {
-                displayTimeSeconds = totalCycleSeconds - currentSeconds;
+                displayTimeSeconds = totalCycleSeconds - currentSec;
                 timeDisplay.style.color = "var(--break-color)";
                 if(isRunning) {
                     topMsg.textContent = "休憩中";
@@ -292,7 +300,7 @@
             const s = (displayTimeSeconds % 60).toString().padStart(2, '0');
             timeDisplay.textContent = `${m}:${s}`;
 
-            const progressRatio = currentSeconds / totalCycleSeconds;
+            const progressRatio = currentSec / totalCycleSeconds;
             const degrees = progressRatio * 360;
             cursorPoint.style.transform = `rotate(${degrees}deg)`;
         }
@@ -331,23 +339,79 @@
             }
         }
 
+        // --- 【修正点3】Screen Wake Lock (画面常時オン) ---
+        async function requestWakeLock() {
+            try {
+                if ('wakeLock' in navigator) {
+                    wakeLock = await navigator.wakeLock.request('screen');
+                    console.log('Wake Lock is active');
+                }
+            } catch (err) {
+                console.error(`${err.name}, ${err.message}`);
+            }
+        }
+
+        function releaseWakeLock() {
+            if (wakeLock !== null) {
+                wakeLock.release()
+                    .then(() => {
+                        wakeLock = null;
+                        console.log('Wake Lock released');
+                    });
+            }
+        }
+
         // --- 進行ロジック ---
         function tick() {
-            currentSeconds++;
-            if (currentSeconds > totalCycleSeconds) {
+            // 現在時刻と開始時刻の差分から正確な経過時間を算出
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            
+            // 実際に表示すべき秒数 (一時停止していた分があれば足す... 今回はリセット型なのでシンプルに)
+            // ここでは pause機能を「一時停止」として実装する場合のロジックを入れています
+            let currentSec = elapsed; 
+
+            if (currentSec > totalCycleSeconds) {
                 finishCycle();
                 return;
             }
-            if (currentSeconds === workSeconds) {
-                playBeep('long');
-                showPraise();
-            } else if (currentSeconds === totalCycleSeconds) {
-                 playBeep('long');
-            } else if (currentSeconds < workSeconds) {
-                const step = Math.floor(workSeconds * 0.2);
-                if (currentSeconds % step === 0 && currentSeconds > 0) playBeep('short');
+
+            // 音のタイミング制御（厳密な一致が難しいため、変化した瞬間を検知するロジックに変更）
+            // ※簡易的に、前回の秒数と比較する方法もありますが、
+            // 今回は「特定の秒数を通過したか」を判定するのは複雑になるため、
+            // 表示更新に合わせて特定のタイミングで鳴らす簡易実装のままにします。
+            // ただし、厳密なタイミングで鳴らしたい場合は、次の秒数に切り替わった瞬間を検知する必要があります。
+            
+            // 簡易実装: 秒が変わったタイミングで判定 (Date.nowベースだと毎フレーム呼ぶわけではないので、
+            // setIntervalの精度依存にはなりますが、時間はズレません)
+            
+            // 作業終了（休憩開始）の判定
+            if (currentSec === workSeconds && workSeconds > 0) {
+                 // 連続再生を防ぐフラグ管理が必要ですが、簡易的に音を鳴らします
+                 // 厳密には「直前のtickでworkSeconds未満だった」判定が必要ですが、
+                 // 1秒ごとの更新ならほぼ大丈夫です。
+                 // 念のため、音が鳴りまくらないようにするのはUI側で制御
             }
-            updateVisuals();
+
+            // ここではシンプルに描画更新に専念させ、
+            // 特定時刻のイベント（音）は「前回の秒数」を覚えておいて「またいだら鳴らす」がベストですが
+            // 既存ロジックを極力活かして実装します。
+            
+            // 既存ロジックの「特定秒数での音」を再現するための工夫
+            // currentSecが変化したタイミングでのみ処理を行う
+            if (this.lastSec !== currentSec) {
+                if (currentSec === workSeconds) {
+                    playBeep('long');
+                    showPraise();
+                } else if (currentSec === totalCycleSeconds) {
+                     playBeep('long');
+                } else if (currentSec < workSeconds) {
+                    const step = Math.floor(workSeconds * 0.2);
+                    if (currentSec % step === 0 && currentSec > 0) playBeep('short');
+                }
+                this.lastSec = currentSec;
+            }
+
+            updateVisuals(currentSec);
         }
 
         function showPraise() {
@@ -359,34 +423,58 @@
         function finishCycle() {
             clearInterval(timerInterval);
             isRunning = false;
+            releaseWakeLock(); // 終了時に画面ロック解除
             startBtn.textContent = "スタート";
             alert("1サイクル終了です！お疲れ様でした。");
-            currentSeconds = 0;
+            pausedTime = 0;
             btmMsg.className = "sub-message";
             btmMsg.textContent = "もう一度頑張る？";
-            updateVisuals();
+            updateVisuals(0);
         }
 
         // --- イベント ---
         startBtn.addEventListener('click', () => {
             initAudio();
+            
             if (isRunning) {
+                // 一時停止処理
                 clearInterval(timerInterval);
                 isRunning = false;
+                releaseWakeLock(); // 一時停止時は画面オフ許可
+                
+                // 停止した時点での経過時間を保存
+                pausedTime = Math.floor((Date.now() - startTime) / 1000);
                 startBtn.textContent = "再開";
+                
             } else {
-                if (currentSeconds === 0) initTimer();
+                // 開始処理
+                requestWakeLock(); // 画面常時オン要求
+                
+                if (pausedTime === 0) {
+                    initTimer(); // 最初から
+                    startTime = Date.now();
+                } else {
+                    // 再開時：現在時刻から「すでに経過した時間」を引いた時間を開始時間とみなす
+                    startTime = Date.now() - (pausedTime * 1000);
+                }
+                
                 isRunning = true;
                 startBtn.textContent = "一時停止";
-                topMsg.textContent = currentSeconds < workSeconds ? "作業中" : "休憩中";
-                timerInterval = setInterval(tick, 1000);
+                
+                // 初回描画
+                const currentSec = pausedTime;
+                topMsg.textContent = currentSec < workSeconds ? "作業中" : "休憩中";
+
+                // インターバル開始
+                timerInterval = setInterval(tick, 200); // 描画をスムーズにするため更新頻度アップ
             }
         });
 
         resetBtn.addEventListener('click', () => {
             clearInterval(timerInterval);
             isRunning = false;
-            currentSeconds = 0;
+            releaseWakeLock(); // リセット時も画面オフ許可
+            pausedTime = 0;
             startBtn.textContent = "スタート";
             topMsg.textContent = "準備完了";
             btmMsg.textContent = "スタートボタンを押してね";
@@ -397,13 +485,21 @@
         [workInput, breakInput].forEach(input => {
             input.addEventListener('change', () => {
                 if (!isRunning) {
-                    currentSeconds = 0;
+                    pausedTime = 0;
                     initTimer();
                 }
             });
         });
 
         initTimer();
+        
+        // ページを離れたり戻ったりした時のWake Lock再取得
+        document.addEventListener('visibilitychange', async () => {
+            if (wakeLock !== null && document.visibilityState === 'visible') {
+                await requestWakeLock();
+            }
+        });
+
     </script>
 </body>
 </html>
