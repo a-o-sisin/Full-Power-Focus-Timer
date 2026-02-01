@@ -8,9 +8,9 @@
     <title>集中＆休憩タイマー</title>
     <style>
         :root {
-            --work-color: #4A90E2; /* 作業：青 */
-            --break-color: #50E3C2; /* 休憩：緑 */
-            --cursor-color: #FF5722; /* 現在地：オレンジ */
+            --work-color: #4A90E2; /* Work: Blue */
+            --break-color: #50E3C2; /* Break: Green */
+            --cursor-color: #FF5722; /* Current: Orange */
             --bg-color: #f0f2f5;
             --text-color: #333;
         }
@@ -21,14 +21,14 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            min-height: 100vh; /* heightから変更してスマホでの表示崩れ防止 */
+            min-height: 100vh; 
             margin: 0;
             background-color: var(--bg-color);
             color: var(--text-color);
             transition: background-color 0.5s;
         }
 
-        /* 設定エリア */
+        /* Settings Area */
         .settings {
             display: flex;
             gap: 20px;
@@ -61,10 +61,10 @@
             font-size: 1rem;
         }
 
-        /* メインタイマー表示部 */
+        /* Main Timer Display */
         .timer-wrapper {
             position: relative;
-            width: 300px; /* 少し縮小してスマホに最適化 */
+            width: 300px;
             height: 300px;
             margin: 20px 0;
         }
@@ -81,14 +81,14 @@
             transition: stroke-dasharray 0.5s;
         }
 
-        /* 背景用 */
+        /* Background */
         .base-circle { stroke: #e6e6e6; }
-        /* 作業時間のアーク */
+        /* Work Arc */
         .work-arc { stroke: var(--work-color); }
-        /* 休憩時間のアーク */
+        /* Break Arc */
         .break-arc { stroke: var(--break-color); }
 
-        /* 現在位置を示すポインター */
+        /* Cursor Pointer */
         .cursor-point {
             position: absolute;
             top: 0; left: 0;
@@ -110,7 +110,7 @@
             box-shadow: 0 2px 4px rgba(0,0,0,0.2);
         }
 
-        /* 中央のテキスト情報 */
+        /* Center Text Info */
         .info-display {
             position: absolute;
             top: 50%; left: 50%;
@@ -147,7 +147,7 @@
             100% { transform: scale(1); opacity: 1; }
         }
 
-        /* コントロールボタン */
+        /* Control Buttons */
         .controls {
             display: flex;
             gap: 15px;
@@ -170,7 +170,7 @@
         #resetBtn { background-color: #fff; color: #666; border: 1px solid #ddd; }
         #resetBtn:hover { background-color: #f8f8f8; }
 
-        /* 今日の実績エリア */
+        /* Daily Stats Area */
         .daily-stats {
             background: #fff;
             padding: 15px 20px;
@@ -267,13 +267,13 @@
     </div>
 
     <script>
-        // --- 設定と定数 ---
+        // --- Settings & Constants ---
         const RADIUS = 140;
         const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
         const workInput = document.getElementById('workInput');
         const breakInput = document.getElementById('breakInput');
         
-        // --- 要素の取得 ---
+        // --- Elements ---
         const workArc = document.querySelector('.work-arc');
         const breakArc = document.querySelector('.break-arc');
         const cursorPoint = document.getElementById('cursorPoint');
@@ -283,12 +283,12 @@
         const startBtn = document.getElementById('startBtn');
         const resetBtn = document.getElementById('resetBtn');
         
-        // 実績表示用要素
+        // Stats Elements
         const statsDate = document.getElementById('statsDate');
         const totalWorkElem = document.getElementById('totalWorkTime');
         const totalBreakElem = document.getElementById('totalBreakTime');
 
-        // --- 状態管理 ---
+        // --- State Management ---
         let totalCycleSeconds = 0;
         let workSeconds = 0;
         let breakSeconds = 0;
@@ -300,10 +300,10 @@
         
         let lastTickSec = 0;
         
-        // 今日の実績用変数
+        // Daily Stats
         let dailyWorkSec = 0;
         let dailyBreakSec = 0;
-        let todayStr = ""; // YYYY-MM-DD形式
+        let todayStr = ""; // YYYY-MM-DD
 
         let audioCtx = null;
         let wakeLock = null;
@@ -314,7 +314,7 @@
             "すごい！目標達成おめでとう！", "神がかった集中力！"
         ];
 
-        // --- 初期化 ---
+        // --- Initialization ---
         function initTimer() {
             const wMin = parseInt(workInput.value);
             const bMin = parseInt(breakInput.value);
@@ -322,7 +322,7 @@
             breakSeconds = bMin * 60;
             totalCycleSeconds = workSeconds + breakSeconds;
 
-            // 円グラフ描画
+            // Draw Circle
             const workRatio = workSeconds / totalCycleSeconds;
             const workDash = workRatio * CIRCUMFERENCE;
             workArc.style.strokeDasharray = `${workDash} ${CIRCUMFERENCE}`;
@@ -336,36 +336,44 @@
             updateVisuals(0);
         }
 
-        // --- 実績管理ロジック ---
+        // --- Stats Logic ---
         function loadDailyStats() {
-            const now = new Date();
-            const year = now.getFullYear();
-            const month = now.getMonth() + 1;
-            const day = now.getDate();
-            todayStr = `${year}-${month}-${day}`; // キー作成
+            try {
+                const now = new Date();
+                const year = now.getFullYear();
+                const month = now.getMonth() + 1;
+                const day = now.getDate();
+                todayStr = `${year}-${month}-${day}`; 
 
-            // 表示用日付更新
-            statsDate.textContent = `📅 ${month}月${day}日の実績`;
+                statsDate.textContent = `📅 ${month}月${day}日の実績`;
 
-            // ローカルストレージから読み込み
-            const savedData = localStorage.getItem(`timer_stats_${todayStr}`);
-            if (savedData) {
-                const parsed = JSON.parse(savedData);
-                dailyWorkSec = parsed.work || 0;
-                dailyBreakSec = parsed.break || 0;
-            } else {
-                dailyWorkSec = 0;
-                dailyBreakSec = 0;
+                const savedData = localStorage.getItem(`timer_stats_${todayStr}`);
+                if (savedData) {
+                    const parsed = JSON.parse(savedData);
+                    dailyWorkSec = parsed.work || 0;
+                    dailyBreakSec = parsed.break || 0;
+                } else {
+                    dailyWorkSec = 0;
+                    dailyBreakSec = 0;
+                }
+                updateStatsDisplay();
+            } catch (e) {
+                console.error("Storage load failed", e);
             }
-            updateStatsDisplay();
         }
 
         function saveDailyStats() {
-            const data = {
-                work: dailyWorkSec,
-                break: dailyBreakSec
-            };
-            localStorage.setItem(`timer_stats_${todayStr}`, JSON.stringify(data));
+            try {
+                const data = {
+                    work: dailyWorkSec,
+                    break: dailyBreakSec
+                };
+                localStorage.setItem(`timer_stats_${todayStr}`, JSON.stringify(data));
+            } catch (e) {
+                // If saving fails (e.g., Private Mode), just ignore it.
+                // This prevents the "Infinite Loop" crash.
+                console.warn("Storage save failed", e);
+            }
         }
 
         function updateStatsDisplay() {
@@ -373,35 +381,37 @@
             totalBreakElem.textContent = `${Math.floor(dailyBreakSec / 60)}分`;
         }
 
-        // --- 累積加算ロジック (重要) ---
+        // --- Accumulation Logic ---
         function accumulateTime(prevSec, currSec) {
-            // 時間が戻っている、もしくは変化がない場合は無視
             if (currSec <= prevSec) return;
 
-            // 今回経過した区間: [start, end]
+            // Cap calculation at cycle end to prevent "Infinite Break"
+            const safeCurr = Math.min(currSec, totalCycleSeconds);
             const start = prevSec;
-            const end = currSec;
+            const end = safeCurr;
+            
+            // If already at end, do nothing
+            if (start >= end) return;
 
-            // 1. 作業時間への加算 (0 ～ workSeconds の範囲と重なる部分)
-            // 重なり = Math.min(end, workSeconds) - Math.max(start, 0)
+            // 1. Work Time Addition
             const workOverlapStart = Math.max(start, 0);
             const workOverlapEnd = Math.min(end, workSeconds);
             if (workOverlapEnd > workOverlapStart) {
                 dailyWorkSec += (workOverlapEnd - workOverlapStart);
             }
 
-            // 2. 休憩時間への加算 (workSeconds ～ totalCycleSeconds の範囲と重なる部分)
+            // 2. Break Time Addition
             const breakOverlapStart = Math.max(start, workSeconds);
             const breakOverlapEnd = Math.min(end, totalCycleSeconds);
             if (breakOverlapEnd > breakOverlapStart) {
                 dailyBreakSec += (breakOverlapEnd - breakOverlapStart);
             }
             
-            saveDailyStats();
+            saveDailyStats(); // Protected by try-catch
             updateStatsDisplay();
         }
 
-        // --- 表示更新 ---
+        // --- Visual Updates ---
         function updateVisuals(currentSec) {
             if (currentSec > totalCycleSeconds) currentSec = totalCycleSeconds;
 
@@ -436,7 +446,7 @@
             cursorPoint.style.transform = `rotate(${degrees}deg)`;
         }
 
-        // --- 音声 (Beep) ---
+        // --- Audio (Beep) ---
         function initAudio() {
             if (!audioCtx) {
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
@@ -446,27 +456,31 @@
 
         function playBeep(type) {
             if (!audioCtx) return;
-            const oscillator = audioCtx.createOscillator();
-            const gainNode = audioCtx.createGain();
-            oscillator.connect(gainNode);
-            gainNode.connect(audioCtx.destination);
+            try {
+                const oscillator = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                oscillator.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
 
-            if (type === 'short') {
-                oscillator.type = 'sine';
-                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
-                gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                oscillator.start();
-                oscillator.stop(audioCtx.currentTime + 0.1);
-            } else if (type === 'long') {
-                oscillator.type = 'triangle';
-                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
-                oscillator.frequency.setValueAtTime(1760, audioCtx.currentTime + 0.1);
-                oscillator.frequency.setValueAtTime(880, audioCtx.currentTime + 0.2);
-                oscillator.frequency.setValueAtTime(1760, audioCtx.currentTime + 0.3);
-                gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
-                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
-                oscillator.start();
-                oscillator.stop(audioCtx.currentTime + 0.5);
+                if (type === 'short') {
+                    oscillator.type = 'sine';
+                    oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+                    gainNode.gain.setValueAtTime(0.1, audioCtx.currentTime);
+                    oscillator.start();
+                    oscillator.stop(audioCtx.currentTime + 0.1);
+                } else if (type === 'long') {
+                    oscillator.type = 'triangle';
+                    oscillator.frequency.setValueAtTime(880, audioCtx.currentTime);
+                    oscillator.frequency.setValueAtTime(1760, audioCtx.currentTime + 0.1);
+                    oscillator.frequency.setValueAtTime(880, audioCtx.currentTime + 0.2);
+                    oscillator.frequency.setValueAtTime(1760, audioCtx.currentTime + 0.3);
+                    gainNode.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                    gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.5);
+                    oscillator.start();
+                    oscillator.stop(audioCtx.currentTime + 0.5);
+                }
+            } catch(e) {
+                console.error("Audio error", e);
             }
         }
 
@@ -490,39 +504,53 @@
             }
         }
 
-        // --- 進行ロジック ---
+        // --- Main Loop ---
         function tick() {
-            const elapsed = Math.floor((Date.now() - startTime) / 1000);
-            let currentSec = elapsed; 
+            try {
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                let currentSec = elapsed; 
 
-            if (currentSec > totalCycleSeconds) {
-                // 終了直前の差分も加算してから終了
-                accumulateTime(lastTickSec, totalCycleSeconds);
-                finishCycle();
-                return;
-            }
-
-            // 前回tickからの経過時間を実績に加算
-            // 画面オフで時間が飛んでも、ここで「飛んだ分」を計算して加算します
-            accumulateTime(lastTickSec, currentSec);
-
-            // 音判定ロジック
-            if (lastTickSec < workSeconds && currentSec >= workSeconds) {
-                playBeep('long');
-                showPraise();
-            }
-            else if (currentSec < workSeconds) {
-                const step = Math.floor(workSeconds * 0.2);
-                const prevStepCount = Math.floor(lastTickSec / step);
-                const currStepCount = Math.floor(currentSec / step);
-                
-                if (currStepCount > prevStepCount && lastTickSec > 0) {
-                     playBeep('short');
+                // If cycle complete
+                if (currentSec > totalCycleSeconds) {
+                    accumulateTime(lastTickSec, totalCycleSeconds);
+                    finishCycle();
+                    return;
                 }
-            }
 
-            lastTickSec = currentSec;
-            updateVisuals(currentSec);
+                // Add time
+                accumulateTime(lastTickSec, currentSec);
+
+                // Beep Logic
+                if (lastTickSec < workSeconds && currentSec >= workSeconds) {
+                    playBeep('long');
+                    showPraise();
+                }
+                else if (currentSec < workSeconds) {
+                    const step = Math.floor(workSeconds * 0.2);
+                    const prevStepCount = Math.floor(lastTickSec / step);
+                    const currStepCount = Math.floor(currentSec / step);
+                    
+                    if (currStepCount > prevStepCount && lastTickSec > 0) {
+                         playBeep('short');
+                    }
+                }
+
+                // Update lastTickSec *AFTER* safe execution
+                lastTickSec = currentSec;
+                updateVisuals(currentSec);
+
+            } catch (e) {
+                console.error("Tick error", e);
+                // Emergency recovery: force update lastTickSec so we don't double count
+                const elapsed = Math.floor((Date.now() - startTime) / 1000);
+                lastTickSec = elapsed;
+            }
+        }
+
+        function showPraise() {
+            const randomMsg = praiseMessages[Math.floor(Math.random() * praiseMessages.length)];
+            btmMsg.textContent = randomMsg;
+            btmMsg.className = "sub-message praise-message";
         }
 
         function finishCycle() {
@@ -538,28 +566,28 @@
             updateVisuals(0);
         }
 
-        // --- イベント ---
+        // --- Events ---
         startBtn.addEventListener('click', () => {
             initAudio();
             
             if (isRunning) {
-                // 一時停止
+                // Pause
                 clearInterval(timerInterval);
                 isRunning = false;
                 releaseWakeLock(); 
                 pausedTime = Math.floor((Date.now() - startTime) / 1000);
                 startBtn.textContent = "再開";
             } else {
-                // 開始
+                // Start
                 requestWakeLock(); 
-                loadDailyStats(); // 日付変更対応のため開始時にもロード確認
+                loadDailyStats();
 
                 if (pausedTime === 0) {
                     initTimer(); 
                     startTime = Date.now();
                     lastTickSec = 0; 
                 } else {
-                    // 再開
+                    // Resume
                     startTime = Date.now() - (pausedTime * 1000);
                     lastTickSec = pausedTime; 
                 }
@@ -596,9 +624,9 @@
             });
         });
 
-        // 起動時処理
+        // Init
         initTimer();
-        loadDailyStats(); // 実績読み込み
+        loadDailyStats();
         
         document.addEventListener('visibilitychange', async () => {
             if (wakeLock !== null && document.visibilityState === 'visible') {
